@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Библиотека - Читатели</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #fff;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background: #f2f2f2;
+        }
+        .nav {
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #f0f0f0;
+        }
+        .nav a {
+            margin-right: 20px;
+            text-decoration: none;
+            color: #333;
+        }
+        .search-box {
+            margin: 20px 0;
+            padding: 5px;
+            width: 300px;
+        }
+        .reader-list {
+            width: 30%;
+            float: left;
+        }
+        .reader-info {
+            width: 65%;
+            float: right;
+        }
+        .clear {
+            clear: both;
+        }
+        .reader-item {
+            padding: 8px;
+            margin: 5px 0;
+            background: #f9f9f9;
+            cursor: pointer;
+            border: 1px solid #ddd;
+        }
+        .reader-item:hover {
+            background: #e0e0e0;
+        }
+        .selected {
+            background: #d0e0ff;
+            font-weight: bold;
+        }
+        button {
+            padding: 5px 10px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border: 2px solid #333;
+            z-index: 100;
+        }
+        .modal input, .modal textarea {
+            width: 100%;
+            margin: 5px 0;
+            padding: 5px;
+        }
+        .footer {
+            margin-top: 30px;
+            padding: 10px;
+            text-align: center;
+            background: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+
+<div class="nav">
+    <a href="/reader_list/">Читатели</a> |
+    <a href="/book_list/">Книги</a>
+</div>
+
+<h1>Читатели</h1>
+
+<div class="reader-list">
+    <input type="text" class="search-box" placeholder="Поиск по ФИО" id="searchInput" value="{{ search_query }}">
+    <div id="readersList">
+        {% for reader in readers %}
+        <div class="reader-item {% if selected_reader and selected_reader.id_reader == reader.id_reader %}selected{% endif %}"
+             onclick="selectReader({{ reader.id_reader }})">
+            <b>{{ reader.last_name }} {{ reader.first_name }}</b><br>
+            <small>{{ reader.email|default:"нет email" }}</small>
+        </div>
+        {% empty %}
+        <p>Нет читателей</p>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="reader-info">
+    <div style="margin-bottom: 20px;">
+        <button onclick="openAddModal()">Добавить читателя</button>
+        {% if selected_reader %}
+        <button onclick="openEditModal()">Изменить данные</button>
+        {% endif %}
+    </div>
+
+    {% if selected_reader %}
+    <div style="border: 1px solid #ddd; padding: 10px; margin-bottom: 20px;">
+        <h3>Информация о читателе</h3>
+        <p><b>ФИО:</b> {{ selected_reader.last_name }} {{ selected_reader.first_name }}</p>
+        <p><b>Телефон:</b> {{ selected_reader.phone|default:"-" }}</p>
+        <p><b>Email:</b> {{ selected_reader.email|default:"-" }}</p>
+        <p><b>Адрес:</b> {{ selected_reader.address|default:"-" }}</p>
+    </div>
+
+    <h3>Книги на руках</h3>
+    <table>
+        <thead>
+            <tr><th>Книга</th><th>Дата выдачи</th><th>Срок возврата</th><th>Действие</th></tr>
+        </thead>
+        <tbody>
+            {% for loan in reader_loans %}
+            <tr>
+                <td>{{ loan.id_copy.id_book.title }}</td>
+                <td>{{ loan.issue_date }}</td>
+                <td>{{ loan.due_date }} {% if not loan.return_date and loan.due_date < now %}<span style="color:red;">(Просрочена!)</span>{% endif %}</td>
+                <td>
+                    {% if not loan.return_date %}
+                    <form method="POST" style="display:inline;">
+                        {% csrf_token %}
+                        <input type="hidden" name="loan_id" value="{{ loan.id_loan }}">
+                        <button type="submit" name="return_book">Вернуть</button>
+                    </form>
+                    {% else %}
+                    Возвращена: {{ loan.return_date }}
+                    {% if loan.fine > 0 %}<br>Штраф: {{ loan.fine }} руб.{% endif %}
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4">Нет книг на руках</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="padding: 20px; text-align: center;">Выберите читателя слева</p>
+    {% endif %}
+</div>
+
+<div class="clear"></div>
+<div class="footer">
+    Тел тех поддержки: +7 (495) 123-45-67
+</div>
+
+<!-- Модальное окно добавления -->
+<div id="addModal" class="modal">
+    <div>
+        <h3>Добавить читателя</h3>
+        <form method="POST">
+            {% csrf_token %}
+            <input type="text" name="first_name" placeholder="Имя *" required><br>
+            <input type="text" name="last_name" placeholder="Фамилия *" required><br>
+            <input type="text" name="phone" placeholder="Телефон"><br>
+            <input type="email" name="email" placeholder="Email"><br>
+            <textarea name="address" placeholder="Адрес" rows="3"></textarea><br>
+            <button type="submit" name="add_reader">Сохранить</button>
+            <button type="button" onclick="closeAddModal()">Отмена</button>
+        </form>
+    </div>
+</div>
+
+<!-- Модальное окно редактирования -->
+{% if selected_reader %}
+<div id="editModal" class="modal">
+    <div>
+        <h3>Редактировать читателя</h3>
+        <form method="POST">
+            {% csrf_token %}
+            <input type="hidden" name="reader_id" value="{{ selected_reader.id_reader }}">
+            <input type="text" name="first_name" value="{{ selected_reader.first_name }}" required><br>
+            <input type="text" name="last_name" value="{{ selected_reader.last_name }}" required><br>
+            <input type="text" name="phone" value="{{ selected_reader.phone|default:'' }}"><br>
+            <input type="email" name="email" value="{{ selected_reader.email|default:'' }}"><br>
+            <textarea name="address" rows="3">{{ selected_reader.address|default:'' }}</textarea><br>
+            <button type="submit" name="edit_reader">Обновить</button>
+            <button type="button" onclick="closeEditModal()">Отмена</button>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<script>
+    function selectReader(readerId) {
+        window.location.href = '/reader_list/?select_reader=' + readerId;
+    }
+
+    function openAddModal() {
+        document.getElementById('addModal').style.display = 'block';
+    }
+
+    function closeAddModal() {
+        document.getElementById('addModal').style.display = 'none';
+    }
+
+    function openEditModal() {
+        document.getElementById('editModal').style.display = 'block';
+    }
+
+    function closeEditModal() {
+        document.getElementById('editModal').style.display = 'none';
+    }
+
+    // Поиск
+    let searchTimeout;
+    document.getElementById('searchInput').addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            window.location.href = '/reader_list/?search=' + encodeURIComponent(this.value);
+        }, 500);
+    });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Библиотека - Книги</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #fff;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background: #f2f2f2;
+        }
+        .nav {
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #f0f0f0;
+        }
+        .nav a {
+            margin-right: 20px;
+            text-decoration: none;
+            color: #333;
+        }
+        .search-box {
+            margin: 20px 0;
+            padding: 5px;
+            width: 300px;
+        }
+        .book-list {
+            width: 30%;
+            float: left;
+        }
+        .book-info {
+            width: 65%;
+            float: right;
+        }
+        .clear {
+            clear: both;
+        }
+        .book-item {
+            padding: 8px;
+            margin: 5px 0;
+            background: #f9f9f9;
+            cursor: pointer;
+            border: 1px solid #ddd;
+        }
+        .book-item:hover {
+            background: #e0e0e0;
+        }
+        .selected {
+            background: #d0e0ff;
+            font-weight: bold;
+        }
+        button {
+            padding: 5px 10px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        select {
+            padding: 5px;
+            margin: 5px;
+        }
+        .status {
+            display: inline-block;
+            padding: 2px 6px;
+            font-size: 12px;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border: 2px solid #333;
+            z-index: 100;
+        }
+        .modal input, .modal select {
+            width: 100%;
+            margin: 5px 0;
+            padding: 5px;
+        }
+        .footer {
+            margin-top: 30px;
+            padding: 10px;
+            text-align: center;
+            background: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+
+<div class="nav">
+    <a href="/reader_list/">Читатели</a> |
+    <a href="/book_list/">Книги</a>
+</div>
+
+<h1>Книги</h1>
+
+<div class="book-list">
+    <input type="text" class="search-box" placeholder="Поиск по названию" id="searchInput" value="{{ search_query }}">
+    <div id="booksList">
+        {% for book in books %}
+        <div class="book-item {% if selected_book and selected_book.id_book == book.id_book %}selected{% endif %}"
+             onclick="selectBook({{ book.id_book }})">
+            <b>{{ book.title }}</b><br>
+            <small>{{ book.id_author.full_name }}</small>
+        </div>
+        {% empty %}
+        <p>Нет книг</p>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="book-info">
+    <div style="margin-bottom: 20px;">
+        <button onclick="openAddModal()">Добавить книгу</button>
+        {% if selected_book %}
+        <button onclick="openEditModal()">Изменить данные</button>
+        {% endif %}
+    </div>
+
+    {% if selected_book %}
+    <div style="border: 1px solid #ddd; padding: 10px; margin-bottom: 20px;">
+        <h3>Информация о книге</h3>
+        <p><b>Название:</b> {{ selected_book.title }}</p>
+        <p><b>Автор:</b> {{ selected_book.id_author.full_name }}</p>
+        <p><b>Издательство:</b> {{ selected_book.id_publisher.name }}</p>
+        <p><b>Жанр:</b> {{ selected_book.id_genre.name }}</p>
+        <p><b>ISBN:</b> {{ selected_book.isbn|default:"-" }}</p>
+    </div>
+
+    <h3>Экземпляры книги</h3>
+    <table>
+        <thead>
+            <tr><th>№ экземпляра</th><th>Статус</th><th>Действие</th></tr>
+        </thead>
+        <tbody>
+            {% for copy in available_copies %}
+            <tr>
+                <td>{{ copy.id_copy }}</td>
+                <td>
+                    <span class="status">
+                        {% if copy.status == 'available' %}Доступна
+                        {% elif copy.status == 'issued' %}Выдана
+                        {% elif copy.status == 'lost' %}Утеряна
+                        {% else %}На ремонте{% endif %}
+                    </span>
+                </td>
+                <td>
+                    {% if copy.status == 'available' %}
+                    <form method="POST" style="display:inline;">
+                        {% csrf_token %}
+                        <input type="hidden" name="copy_id" value="{{ copy.id_copy }}">
+                        <input type="hidden" name="book_id" value="{{ selected_book.id_book }}">
+                        <select name="reader_id" required>
+                            <option value="">Выбрать читателя...</option>
+                            {% for reader in readers %}
+                            <option value="{{ reader.id_reader }}">{{ reader.last_name }} {{ reader.first_name }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" name="issue_book">Выдать</button>
+                    </form>
+                    {% endif %}
+
+                    <form method="POST" style="display:inline;">
+                        {% csrf_token %}
+                        <input type="hidden" name="copy_id" value="{{ copy.id_copy }}">
+                        <input type="hidden" name="book_id" value="{{ selected_book.id_book }}">
+                        <select name="status" onchange="this.form.submit()">
+                            <option value="">Изменить статус</option>
+                            <option value="available" {% if copy.status == 'available' %}selected{% endif %}>Доступна</option>
+                            <option value="issued" {% if copy.status == 'issued' %}selected{% endif %}>Выдана</option>
+                            <option value="lost" {% if copy.status == 'lost' %}selected{% endif %}>Утеряна</option>
+                            <option value="repair" {% if copy.status == 'repair' %}selected{% endif %}>На ремонте</option>
+                        </select>
+                        <button type="submit" name="change_status">OK</button>
+                    </form>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3">Нет экземпляров</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="padding: 20px; text-align: center;">Выберите книгу слева</p>
+    {% endif %}
+</div>
+
+<div class="clear"></div>
+<div class="footer">
+     Тел тех поддержки: +7 (495) 123-45-67
+</div>
+
+<!-- Модальное окно добавления книги -->
+<div id="addModal" class="modal">
+    <div style="width: 400px;">
+        <h3>Добавить книгу</h3>
+        <form method="POST">
+            {% csrf_token %}
+            <input type="text" name="title" placeholder="Название *" required><br>
+            <input type="text" name="isbn" placeholder="ISBN"><br>
+            <select name="author_id" required>
+                <option value="">Выберите автора</option>
+                {% for author in authors %}
+                <option value="{{ author.id_author }}">{{ author.full_name }}</option>
+                {% endfor %}
+            </select><br>
+            <select name="publisher_id" required>
+                <option value="">Выберите издательство</option>
+                {% for publisher in publishers %}
+                <option value="{{ publisher.id_publisher }}">{{ publisher.name }}</option>
+                {% endfor %}
+            </select><br>
+            <select name="genre_id" required>
+                <option value="">Выберите жанр</option>
+                {% for genre in genres %}
+                <option value="{{ genre.id_genre }}">{{ genre.name }}</option>
+                {% endfor %}
+            </select><br>
+            <button type="submit" name="add_book">Сохранить</button>
+            <button type="button" onclick="closeAddModal()">Отмена</button>
+        </form>
+    </div>
+</div>
+
+<!-- Модальное окно редактирования -->
+{% if selected_book %}
+<div id="editModal" class="modal">
+    <div style="width: 400px;">
+        <h3>Редактировать книгу</h3>
+        <form method="POST">
+            {% csrf_token %}
+            <input type="hidden" name="book_id" value="{{ selected_book.id_book }}">
+            <input type="text" name="title" value="{{ selected_book.title }}" required><br>
+            <input type="text" name="isbn" value="{{ selected_book.isbn|default:'' }}"><br>
+            <select name="author_id" required>
+                {% for author in authors %}
+                <option value="{{ author.id_author }}" {% if selected_book.id_author.id_author == author.id_author %}selected{% endif %}>
+                    {{ author.full_name }}
+                </option>
+                {% endfor %}
+            </select><br>
+            <select name="publisher_id" required>
+                {% for publisher in publishers %}
+                <option value="{{ publisher.id_publisher }}" {% if selected_book.id_publisher.id_publisher == publisher.id_publisher %}selected{% endif %}>
+                    {{ publisher.name }}
+                </option>
+                {% endfor %}
+            </select><br>
+            <select name="genre_id" required>
+                {% for genre in genres %}
+                <option value="{{ genre.id_genre }}" {% if selected_book.id_genre.id_genre == genre.id_genre %}selected{% endif %}>
+                    {{ genre.name }}
+                </option>
+                {% endfor %}
+            </select><br>
+            <button type="submit" name="edit_book">Обновить</button>
+            <button type="button" onclick="closeEditModal()">Отмена</button>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<script>
+    function selectBook(bookId) {
+        window.location.href = '/book_list/?select_book=' + bookId;
+    }
+
+    function openAddModal() {
+        document.getElementById('addModal').style.display = 'block';
+    }
+
+    function closeAddModal() {
+        document.getElementById('addModal').style.display = 'none';
+    }
+
+    function openEditModal() {
+        document.getElementById('editModal').style.display = 'block';
+    }
+
+    function closeEditModal() {
+        document.getElementById('editModal').style.display = 'none';
+    }
+
+    let searchTimeout;
+    document.getElementById('searchInput').addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            window.location.href = '/book_list/?search=' + encodeURIComponent(this.value);
+        }, 500);
+    });
+</script>
+
+</body>
+</html>
